@@ -1,0 +1,13 @@
+apiVersion: v2
+name: mbin
+description: Helm chart to deploy Mbin (web, messenger workers, Valkey, RabbitMQ and optionally PostgreSQL) on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.11.0"
+home: https://github.com/MbinOrg/mbin
+sources:
+  - https://github.com/MbinOrg/mbin
+keywords:
+  - mbin
+  - fediverse
+  - activitypub

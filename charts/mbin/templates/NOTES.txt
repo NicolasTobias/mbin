@@ -1,0 +1,18 @@
+Mbin {{ .Chart.AppVersion }} has been installed as "{{ include "mbin.fullname" . }}".
+
+  Site: https://{{ .Values.mbin.domain }}
+
+First steps:
+  1. Wait for the pods to be ready (the first start runs the database migrations):
+       kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+  2. Create the admin user:
+       kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "mbin.fullname" . }}-web -- bin/console mbin:user:create <username> <email> <password>
+       kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "mbin.fullname" . }}-web -- bin/console mbin:user:admin <username>
+{{- if not (include "mbin.oauthEnabled" .) }}
+
+WARNING: no OAuth2 key pair configured (oauth.*): the web UI works, the API does not.
+{{- end }}
+{{- if and .Values.persistence.media.enabled (not .Values.s3.enabled) (gt (int .Values.web.replicaCount) 1) }}
+
+WARNING: web.replicaCount > 1 with a local media volume. Use a ReadWriteMany volume or S3.
+{{- end }}

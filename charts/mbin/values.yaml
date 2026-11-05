@@ -1,0 +1,193 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/mbinorg/mbin
+  # Defaults to "v" + Chart.appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Non-secret application settings. They end up in a ConfigMap as environment
+# variables; see .env.example_docker in the Mbin repository for the full list.
+mbin:
+  domain: mbin.example.com
+  title: Mbin
+  defaultLang: en
+  contactEmail: contact@example.com
+  senderEmail: noreply@example.com
+  federationEnabled: true
+  registrationsEnabled: true
+  # Public URL of the uploaded media. Defaults to https://<domain>/media.
+  # With S3 storage, set it to the public URL of the bucket.
+  storageUrl: ""
+  # Proxies whose X-Forwarded-* headers are trusted (ingress controller, load balancer).
+  trustedProxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  # Any additional non-secret variable, e.g. KBIN_CAPTCHA_ENABLED: "true".
+  extraEnv: {}
+
+# Secrets used by every component. Either let the chart generate them (they are
+# kept across upgrades) or point to a Secret you manage yourself.
+#
+# Keys of an existing Secret:
+#   APP_SECRET, MERCURE_JWT_SECRET, OAUTH_ENCRYPTION_KEY, POSTGRES_PASSWORD,
+#   RABBITMQ_PASSWORD, REDIS_PASSWORD
+# and optionally MAILER_DSN, S3_KEY, S3_SECRET, HCAPTCHA_SECRET and the
+# OAUTH_*_SECRET of the social login providers. Passwords end up inside URLs,
+# so use only URL-safe characters (letters and digits).
+secrets:
+  existingSecret: ""
+  # Extra keys added to the generated Secret (ignored with existingSecret),
+  # e.g. MAILER_DSN: "smtp://user:pass@smtp.example.com:587".
+  extra: {}
+
+# Key pair for the OAuth2 API (see docs/02-admin/01-installation/02-docker.md).
+# Without it the web UI works but the API does not. Provide either the PEM
+# contents or a Secret with the keys "private.pem", "public.pem" and,
+# if the private key is encrypted, "passphrase".
+oauth:
+  existingSecret: ""
+  privateKey: ""
+  publicKey: ""
+  passphrase: ""
+
+# Pod security context of the web and messenger pods. The image starts as root,
+# fixes ownership of its writable directories and drops to MBIN_USER (1000:1000);
+# fsGroup makes the media volume writable by that user.
+podSecurityContext:
+  fsGroup: 1000
+
+web:
+  replicaCount: 1
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  resources: {}
+  # Caddy stops accepting connections on SIGTERM while ingress controllers need a
+  # few seconds to notice the endpoint is gone; the preStop sleep avoids 503s
+  # during rollouts. Keep terminationGracePeriodSeconds above it.
+  terminationGracePeriodSeconds: 45
+  preStopSleepSeconds: 15
+  service:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: true
+  className: ""
+  annotations: {}
+  # Extra hostnames besides mbin.domain.
+  extraHosts: []
+  tls: []
+  #  - secretName: mbin-tls
+  #    hosts:
+  #      - mbin.example.com
+
+messenger:
+  replicaCount: 2
+  queues:
+    - scheduler_default
+    - old
+    - async
+    - async_slow
+    - outbox
+    - deliver
+    - inbox
+    - resolve
+    - receive
+    - failed
+  timeLimit: 3600
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  resources: {}
+
+# Uploaded media. The web and messenger pods must see the same files: with more
+# than one replica, or when the pods land on different nodes, use a
+# ReadWriteMany volume or S3 instead.
+persistence:
+  media:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+
+s3:
+  enabled: false
+  bucket: ""
+  region: ""
+  endpoint: ""
+  version: latest
+  # S3_KEY and S3_SECRET go in the Secret (secrets.extra or secrets.existingSecret).
+
+# Security context shared by the bundled Valkey, RabbitMQ, amqproxy and PostgreSQL.
+dependenciesSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+postgresql:
+  enabled: true
+  # Major version, used for the image tag and for Doctrine's serverVersion.
+  version: "17"
+  image:
+    repository: docker.io/library/postgres
+    tag: ""
+  auth:
+    username: mbin
+    database: mbin
+    # The password lives in the Secret (POSTGRES_PASSWORD).
+  # Used when enabled=false. The user must be allowed to CREATE EXTENSION.
+  external:
+    host: ""
+    port: 5432
+  persistence:
+    storageClass: ""
+    size: 10Gi
+  resources: {}
+
+rabbitmq:
+  image:
+    repository: docker.io/library/rabbitmq
+    tag: 3-management-alpine
+  auth:
+    username: mbin
+  persistence:
+    storageClass: ""
+    size: 2Gi
+  resources: {}
+
+amqproxy:
+  image:
+    repository: docker.io/cloudamqp/amqproxy
+    tag: latest
+  resources: {}
+
+valkey:
+  image:
+    repository: docker.io/valkey/valkey
+    tag: trixie
+  # Mbin keeps user sessions in Valkey: without persistence every restart logs
+  # everybody out.
+  config: |
+    timeout 300
+    tcp-keepalive 300
+    maxmemory 1gb
+    maxmemory-policy volatile-ttl
+    lazyfree-lazy-eviction yes
+    lazyfree-lazy-expire yes
+    lazyfree-lazy-server-del yes
+    replica-lazy-flush yes
+    io-threads 4
+    io-threads-do-reads yes
+    save ""
+    appendonly yes
+  persistence:
+    storageClass: ""
+    size: 1Gi
+  resources: {}

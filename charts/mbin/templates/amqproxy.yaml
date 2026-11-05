@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mbin.fullname" . }}-amqproxy
+  labels:
+    {{- include "mbin.labels" . | nindent 4 }}
+    app.kubernetes.io/component: amqproxy
+spec:
+  selector:
+    {{- include "mbin.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: amqproxy
+  ports:
+    - name: amqp
+      port: 5673
+      targetPort: amqp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mbin.fullname" . }}-amqproxy
+  labels:
+    {{- include "mbin.labels" . | nindent 4 }}
+    app.kubernetes.io/component: amqproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "mbin.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: amqproxy
+  template:
+    metadata:
+      labels:
+        {{- include "mbin.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: amqproxy
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.dependenciesSecurityContext | nindent 8 }}
+      containers:
+        - name: amqproxy
+          image: "{{ .Values.amqproxy.image.repository }}:{{ .Values.amqproxy.image.tag }}"
+          args:
+            - {{ printf "amqp://%s-rabbitmq:5672" (include "mbin.fullname" .) | quote }}
+          ports:
+            - name: amqp
+              containerPort: 5673
+          readinessProbe:
+            tcpSocket:
+              port: amqp
+            periodSeconds: 10
+          {{- with .Values.amqproxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

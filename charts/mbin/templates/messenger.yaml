@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mbin.fullname" . }}-messenger
+  labels:
+    {{- include "mbin.labels" . | nindent 4 }}
+    app.kubernetes.io/component: messenger
+spec:
+  replicas: {{ .Values.messenger.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mbin.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: messenger
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.messenger.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mbin.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: messenger
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: messenger
+          image: {{ include "mbin.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - bin/console
+            - messenger:consume
+            {{- range .Values.messenger.queues }}
+            - {{ . | quote }}
+            {{- end }}
+            - {{ printf "--time-limit=%v" .Values.messenger.timeLimit | quote }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mbin.fullname" . }}
+            - secretRef:
+                name: {{ include "mbin.secretName" . }}
+          env:
+            {{- include "mbin.env" . | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "ps aux | grep 'messenger[:]consume'"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          {{- with .Values.messenger.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-config
+              mountPath: /config
+            {{- if and .Values.persistence.media.enabled (not .Values.s3.enabled) }}
+            - name: media
+              mountPath: /app/public/media
+            {{- end }}
+            {{- if include "mbin.oauthEnabled" . }}
+            - name: oauth
+              mountPath: /app/config/oauth2
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: caddy-data
+          emptyDir: {}
+        - name: caddy-config
+          emptyDir: {}
+        {{- if and .Values.persistence.media.enabled (not .Values.s3.enabled) }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-media" (include "mbin.fullname" .)) .Values.persistence.media.existingClaim }}
+        {{- end }}
+        {{- if include "mbin.oauthEnabled" . }}
+        - name: oauth
+          secret:
+            secretName: {{ include "mbin.oauthSecretName" . }}
+            items:
+              - key: private.pem
+                path: private.pem
+              - key: public.pem
+                path: public.pem
+        {{- end }}
+      {{- with .Values.messenger.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.messenger.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.messenger.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

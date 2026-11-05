@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mbin.fullname" . }}
+  labels:
+    {{- include "mbin.labels" . | nindent 4 }}
+data:
+  MBIN_USER: "1000:1000"
+  APP_ENV: "prod"
+  SERVER_NAME: ":80"
+  CADDY_GLOBAL_OPTIONS: "auto_https off"
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+  POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
+  POSTGRES_VERSION: {{ .Values.postgresql.version | quote }}
+  KBIN_DOMAIN: {{ .Values.mbin.domain | quote }}
+  KBIN_TITLE: {{ .Values.mbin.title | quote }}
+  KBIN_META_TITLE: {{ .Values.mbin.title | quote }}
+  KBIN_DEFAULT_LANG: {{ .Values.mbin.defaultLang | quote }}
+  KBIN_CONTACT_EMAIL: {{ .Values.mbin.contactEmail | quote }}
+  KBIN_SENDER_EMAIL: {{ .Values.mbin.senderEmail | quote }}
+  KBIN_FEDERATION_ENABLED: {{ .Values.mbin.federationEnabled | quote }}
+  KBIN_REGISTRATIONS_ENABLED: {{ .Values.mbin.registrationsEnabled | quote }}
+  KBIN_STORAGE_URL: {{ default (printf "https://%s/media" .Values.mbin.domain) .Values.mbin.storageUrl | quote }}
+  TRUSTED_PROXIES: {{ .Values.mbin.trustedProxies | quote }}
+  MERCURE_URL: {{ printf "http://%s-web:%v/.well-known/mercure" (include "mbin.fullname" .) .Values.web.service.port | quote }}
+  MERCURE_PUBLIC_URL: {{ printf "https://%s/.well-known/mercure" .Values.mbin.domain | quote }}
+  {{- if .Values.s3.enabled }}
+  S3_BUCKET: {{ required "s3.bucket is required when s3.enabled=true" .Values.s3.bucket | quote }}
+  S3_REGION: {{ .Values.s3.region | quote }}
+  S3_ENDPOINT: {{ .Values.s3.endpoint | quote }}
+  S3_VERSION: {{ .Values.s3.version | quote }}
+  {{- end }}
+  {{- if include "mbin.oauthEnabled" . }}
+  OAUTH_PRIVATE_KEY: "%kernel.project_dir%/config/oauth2/private.pem"
+  OAUTH_PUBLIC_KEY: "%kernel.project_dir%/config/oauth2/public.pem"
+  {{- end }}
+  {{- range $k, $v := .Values.mbin.extraEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

@@ -1,0 +1,21 @@
+mbin:
+  domain: social.example.org
+  storageUrl: https://media.example.org
+postgresql:
+  enabled: false
+  version: "16"
+  external:
+    host: postgres.example.internal
+secrets:
+  existingSecret: mbin-secrets
+s3:
+  enabled: true
+  bucket: mbin-media
+  region: eu-west-1
+  endpoint: https://s3.eu-west-1.amazonaws.com
+ingress:
+  className: nginx
+  tls:
+    - secretName: mbin-tls
+      hosts:
+        - social.example.org
